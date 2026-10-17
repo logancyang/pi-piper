@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.jpg" alt="pi-piper: you text from a hammock while a little robot crew marches out to build" width="100%"></p>
+
 # pi-piper
 
 > A quiet line between intent and work.
@@ -31,7 +33,7 @@ piper daemon start
 piper start inbox --cwd /path/to/repo --prompt 'Inspect the project and report its state'
 piper watch --timeout 60
 piper loop https://github.com/acme/widgets/issues/42 --cwd /path/to/linked-worktree \
-  --leader openai/gpt-4.1 --worker openai/gpt-4.1-mini
+  --leader anthropic/claude-opus --worker anthropic/claude-sonnet
 ```
 
 `piper start` supports `--prompt` or `--prompt-file`; `send`, `status`, `tail`, `wait`, `cancel`, `pending`, and `ack` operate on jobs and notifications. `piper wait-loop ISSUE` waits for a loop's terminal event.
