@@ -1,3 +1,0 @@
-#!/bin/sh
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-exec node --import "$ROOT/node_modules/tsx/dist/loader.mjs" "$ROOT/src/main.ts" "$@"

@@ -1,14 +1,15 @@
+#!/usr/bin/env node
 import { createServer, request as httpRequest, type ServerResponse } from 'node:http';
 import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve, join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Runner, home, hash, type JobEvent } from './runner.js';
 import { runLoop } from './loop.js';
 import { launchLoop, waitLoop } from './loop-io.js';
 import { loadLoopOptions } from './loop-config.js';
+import { cliArgs } from './self.js';
 
 const socket = join(home, 'daemon.sock');
 const pidFile = join(home, 'daemon.pid');
@@ -177,8 +178,8 @@ async function daemon(action: string) {
   try { console.log(JSON.stringify(await rpc({ op: 'health' }))); return; } catch {}
   const fd = openSync(logFile, 'a', 0o600);
   const child = spawn('nohup', ['flock', '-n', '-F', join(home, 'daemon.lock'),
-    join(nodeDir, 'node'), '--import', 'tsx', fileURLToPath(import.meta.url), '_serve'], {
-    cwd: dirname(dirname(fileURLToPath(import.meta.url))), detached: true, stdio: ['ignore', fd, fd],
+    join(nodeDir, 'node'), ...cliArgs('_serve')], {
+    cwd: home, detached: true, stdio: ['ignore', fd, fd],
     env: { ...process.env, PIPER_LOCKED: '1', PATH: `${nodeDir}:${process.env.PATH}` },
   });
   closeSync(fd);

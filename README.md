@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.jpg" alt="pi-piper: you text from a hammock while a little robot crew marches out to build" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/logancyang/pi-piper/main/assets/banner.jpg" alt="pi-piper: you text from a hammock while a little robot crew marches out to build" width="100%"></p>
 
 # pi-piper
 
@@ -21,9 +21,16 @@ The leader designs, plans, and reviews; the faster worker implements. Astra/Luna
 Requires Node 22+ and Pi signed in with `pi /login`.
 
 ```sh
-npm install
-npm link                 # or install this package by your preferred method
+npm install -g @logancyang/pi-piper
 piper daemon start
+```
+
+From a checkout, for development:
+
+```sh
+git clone https://github.com/logancyang/pi-piper.git && cd pi-piper
+npm install              # also builds dist/
+npm link
 ```
 
 ## In a minute

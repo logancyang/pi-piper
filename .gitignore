@@ -4,3 +4,5 @@ logs/
 *.db*
 .piper-loop/
 .env*
+dist/
+*.tgz

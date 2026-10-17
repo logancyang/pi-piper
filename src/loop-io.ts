@@ -3,13 +3,11 @@ import { promisify } from 'node:util';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { issueKey } from './loop-policy.js';
+import { cliArgs } from './self.js';
 import type { Role } from './loop-config.js';
 const exec = promisify(execFile);
-export const root = fileURLToPath(new URL('../', import.meta.url));
-const cli = join(root, 'src/main.ts'), loader = join(root, 'node_modules/tsx/dist/loader.mjs');
 export const eventFile = join(process.env.PIPER_HOME || join(homedir(), '.pi-piper'), 'events.jsonl');
 export const load = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
 export function save(path: string, value: unknown) {
@@ -21,7 +19,7 @@ export async function command(executable: string, args: string[], cwd: string, t
   return stdout.trim();
 }
 const piper = async (args: string[], cwd: string, timeout = 30_000) =>
-  JSON.parse(await command(process.execPath, ['--import', loader, cli, ...args], cwd, timeout));
+  JSON.parse(await command(process.execPath, cliArgs(...args), cwd, timeout));
 export type Output = { text: string; turns: number; tokens?: number };
 export type Comment = { key: string; kind: string; root_id: number | null; [key: string]: unknown };
 export type Context = { base: string; comments: Comment[]; seen: string[] };
@@ -105,8 +103,8 @@ export function dryIO(dir: string): LoopIO {
 export async function launchLoop(url: string, cwd: string, dry: boolean, args: string[]) {
   const dir = join(cwd, '.piper-loop', issueKey(url));
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const child = spawn('flock', ['-n', '-F', join(dir, 'loop.lock'), process.execPath, '--import', loader, cli,
-    '_loop', url, '--cwd', cwd, ...args, ...(dry ? ['--dry-run'] : [])], { stdio: 'inherit' });
+  const child = spawn('flock', ['-n', '-F', join(dir, 'loop.lock'), process.execPath, ...cliArgs(
+    '_loop', url, '--cwd', cwd, ...args, ...(dry ? ['--dry-run'] : []))], { stdio: 'inherit' });
   return new Promise<number>((resolve, reject) => { child.on('error', reject); child.on('exit', code => resolve(code ?? 1)); });
 }
 export async function ignoreState(cwd: string) {
