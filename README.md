@@ -18,7 +18,7 @@ The leader designs, plans, and reviews; the faster worker implements. Astra/Luna
 
 ## Install
 
-Requires Node 22+ and Pi signed in with `pi /login`.
+Requires Node 22.19+ and Pi signed in with `pi /login`.
 
 ```sh
 npm install -g @logancyang/pi-piper
