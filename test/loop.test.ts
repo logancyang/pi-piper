@@ -170,7 +170,7 @@ test('resume reuses frozen request id and prompt after disconnect', async () => 
 test('CLI --dry-run exercises plan/implement/review/fix/review with no network or daemon', () => {
   const cwd = temporary(), bin = join(cwd, 'bin');
   mkdirSync(bin);
-  for (const name of ['gh', 'git', 'piper']) {
+  for (const name of ['gh', 'git', 'piper', 'pi-piper']) {
     const path = join(bin, name);
     writeFileSync(path, '#!/bin/sh\necho UNEXPECTED_EXTERNAL_CALL >&2\nexit 99\n'); chmodSync(path, 0o755);
   }

@@ -27,7 +27,7 @@
     "url": "git+https://github.com/logancyang/pi-piper.git"
   },
   "bin": {
-    "piper": "dist/main.js"
+    "pi-piper": "dist/main.js"
   },
   "files": [
     "dist/",

@@ -15,18 +15,18 @@ const socket = join(home, 'daemon.sock');
 const pidFile = join(home, 'daemon.pid');
 const logFile = join(home, 'daemon.log');
 const nodeDir = dirname(process.execPath);
-const help = `piper daemon start|stop|status
-piper start <job> --cwd DIR (--prompt-file F | --prompt TEXT) [--model openai/gpt-4.1] [--thinking high] [--request-id ID]
-piper send <job> (--prompt-file F | --prompt TEXT) [--request-id ID]
-piper status [job]
-piper cancel <job>
-piper tail <job> [-n N]
-piper wait <job> --until settled|pr|any [--timeout S]
-piper watch [--since EVENT_ID] [--timeout S]
-piper ack <event-id>...
-piper pending
-piper loop <issue-url> --cwd DIR --leader MODEL --worker MODEL [--leader-thinking LEVEL] [--worker-thinking LEVEL] [--prompts DIR] [--dry-run]
-piper wait-loop <issue-key-or-url> [--timeout S]`;
+const help = `pi-piper daemon start|stop|status
+pi-piper start <job> --cwd DIR (--prompt-file F | --prompt TEXT) [--model openai/gpt-4.1] [--thinking high] [--request-id ID]
+pi-piper send <job> (--prompt-file F | --prompt TEXT) [--request-id ID]
+pi-piper status [job]
+pi-piper cancel <job>
+pi-piper tail <job> [-n N]
+pi-piper wait <job> --until settled|pr|any [--timeout S]
+pi-piper watch [--since EVENT_ID] [--timeout S]
+pi-piper ack <event-id>...
+pi-piper pending
+pi-piper loop <issue-url> --cwd DIR --leader MODEL --worker MODEL [--leader-thinking LEVEL] [--worker-thinking LEVEL] [--prompts DIR] [--dry-run]
+pi-piper wait-loop <issue-key-or-url> [--timeout S]`;
 type Command = { op: string; job?: string; cwd?: string; model?: string; thinking?: string;
   prompt?: string; requestId?: string; n?: number; until?: string; timeout?: number; since?: string; ids?: string[] };
 
@@ -46,7 +46,7 @@ function rpc(command: Command): Promise<any> {
       res.on('error', reject);
       res.on('aborted', () => reject(new Error('Daemon disconnected; restart it and repeat the command')));
     });
-    req.on('error', () => reject(new Error('Daemon unavailable. Run: piper daemon start')));
+    req.on('error', () => reject(new Error('Daemon unavailable. Run: pi-piper daemon start')));
     req.end(JSON.stringify(command));
   });
 }
@@ -55,7 +55,7 @@ function json(res: ServerResponse, value: unknown, code = 200) {
   res.end(JSON.stringify(value) + '\n');
 }
 async function serve() {
-  if (process.env.PIPER_LOCKED !== '1') throw new Error('Internal command: use piper daemon start');
+  if (process.env.PIPER_LOCKED !== '1') throw new Error('Internal command: use pi-piper daemon start');
   process.umask(0o077);
   // flock is already held before opening the DB or removing a stale socket.
   rmSync(socket, { force: true });
@@ -268,6 +268,6 @@ async function main() {
 }
 main().catch(error => {
   // Do not log arbitrary error objects, causes, headers, or ModelRuntime state.
-  console.error(process.argv.includes('_serve') ? 'Daemon initialization failed (details suppressed for credential safety).' : error instanceof Error ? error.message : 'piper failed');
+  console.error(process.argv.includes('_serve') ? 'Daemon initialization failed (details suppressed for credential safety).' : error instanceof Error ? error.message : 'pi-piper failed');
   process.exitCode = 1;
 });

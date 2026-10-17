@@ -18,7 +18,7 @@ export async function command(executable: string, args: string[], cwd: string, t
   const { stdout } = await exec(executable, args, { cwd, timeout, maxBuffer: 16 * 1024 * 1024 });
   return stdout.trim();
 }
-const piper = async (args: string[], cwd: string, timeout = 30_000) =>
+const runCli = async (args: string[], cwd: string, timeout = 30_000) =>
   JSON.parse(await command(process.execPath, cliArgs(...args), cwd, timeout));
 export type Output = { text: string; turns: number; tokens?: number };
 export type Comment = { key: string; kind: string; root_id: number | null; [key: string]: unknown };
@@ -40,11 +40,11 @@ export function liveIO(cwd: string, key: string, dir: string, models: Record<Rol
   return {
     async turn(role, id, prompt) {
       const job = `${key}-${role}`;
-      await piper(['start', job, '--cwd', cwd, '--model', models[role],
+      await runCli(['start', job, '--cwd', cwd, '--model', models[role],
         '--thinking', thinking[role], '--request-id', id, '--prompt', prompt], cwd);
-      const event = await piper(['wait', job, '--until', 'settled'], cwd, 0);
+      const event = await runCli(['wait', job, '--until', 'settled'], cwd, 0);
       if (event.type !== 'done' || event.requestId !== id) throw new Error(`Job ${job} did not complete for ${id}: ${event.question ?? event.reason ?? event.type}`);
-      const output: Output = await piper(['output', job], cwd);
+      const output: Output = await runCli(['output', job], cwd);
       // Task-specific parsers still see VERDICT/HEAD as their final line.
       return { ...output, text: output.text.trimEnd().replace(/(?:^|\n)STATUS: DONE$/, '') };
     },

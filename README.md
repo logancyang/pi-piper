@@ -9,7 +9,7 @@ pi-piper is a small durable runner for always-on Pi coding agents. It gives a bo
 An always-on bot such as Grok Bot, Dots, Muse, or Hermes Agent can run on its own cloud computer. Talk to it from your phone like a chief of staff; it can delegate work and report back while you are away.
 
 ```text
-phone ↔ bot ↔ piper
+phone ↔ bot ↔ pi-piper
                  ├─ leader job: plan / review
                  └─ worker job: implement / fix
 ```
@@ -22,7 +22,7 @@ Requires Node 22.19+ and Pi signed in with `pi /login`.
 
 ```sh
 npm install -g @logancyang/pi-piper
-piper daemon start
+pi-piper daemon start
 ```
 
 From a checkout, for development:
@@ -36,29 +36,29 @@ npm link
 ## In a minute
 
 ```sh
-piper daemon start
-piper start inbox --cwd /path/to/repo --prompt 'Inspect the project and report its state'
-piper watch --timeout 60
-piper loop https://github.com/acme/widgets/issues/42 --cwd /path/to/linked-worktree \
+pi-piper daemon start
+pi-piper start inbox --cwd /path/to/repo --prompt 'Inspect the project and report its state'
+pi-piper watch --timeout 60
+pi-piper loop https://github.com/acme/widgets/issues/42 --cwd /path/to/linked-worktree \
   --leader anthropic/claude-opus --worker anthropic/claude-sonnet
 ```
 
-`piper start` supports `--prompt` or `--prompt-file`; `send`, `status`, `tail`, `wait`, `cancel`, `pending`, and `ack` operate on jobs and notifications. `piper wait-loop ISSUE` waits for a loop's terminal event.
+`pi-piper start` supports `--prompt` or `--prompt-file`; `send`, `status`, `tail`, `wait`, `cancel`, `pending`, and `ack` operate on jobs and notifications. `pi-piper wait-loop ISSUE` waits for a loop's terminal event.
 
 ## Bot supervisor protocol
 
-1. Run `piper watch` in the background and wake when it returns.
+1. Run `pi-piper watch` in the background and wake when it returns.
 2. On wake, answer or relay every `NEEDS_INPUT` event; report pull requests and finished jobs.
 3. Handle each event before acknowledging it.
-4. Run `piper ack EVENT_ID ...` for events handled.
-5. Re-run `piper watch`; use `piper pending` to inspect unacknowledged events.
+4. Run `pi-piper ack EVENT_ID ...` for events handled.
+5. Re-run `pi-piper watch`; use `pi-piper pending` to inspect unacknowledged events.
 
 Every job turn ends with exactly one final line: `STATUS: DONE`, `STATUS: NEEDS_INPUT: <question>`, or `STATUS: BLOCKED: <reason>`. Missing or malformed status is not success. Watch delivery is at-least-once, so make external actions safe to repeat.
 
 ## Issue loop and config
 
 ```sh
-piper loop <issue-url> --cwd DIR --leader <model> --worker <model> \
+pi-piper loop <issue-url> --cwd DIR --leader <model> --worker <model> \
   [--leader-thinking LEVEL] [--worker-thinking LEVEL] [--prompts DIR] [--dry-run]
 ```
 
@@ -76,8 +76,8 @@ An optional `piper.config.json` sets role models/thinking, prompt files, and cap
     "workerImplement": "worker-implement.md",
     "workerFix": "worker-fix.md",
     "triage": "triage.md",
-    "reviewGuidance": "~/.config/piper/review.md",
-    "prDescription": "~/.config/piper/pr.md"
+    "reviewGuidance": "~/.config/pi-piper/review.md",
+    "prDescription": "~/.config/pi-piper/pr.md"
   },
   "caps": { "maxFixRounds": 2, "maxFindings": 5, "sizeBudget": 400 }
 }
