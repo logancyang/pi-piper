@@ -1,0 +1,6 @@
+node_modules/
+state/
+logs/
+*.db*
+.piper-loop/
+.env*

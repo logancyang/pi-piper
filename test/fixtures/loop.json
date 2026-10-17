@@ -1,0 +1,28 @@
+{
+  "finding": {"id":"lost-write","title":"Preserve the write","file":"src/save.ts","instructions":"In save(value: Value): void, call validateValue(value) before write(value); reuse validateValue. Add test/save.test.ts test invalid value preserves storage, asserting throw and zero writes. Run npm run lint, npm run check, npm test, npm run build at repo root. Do not change public signatures or dependencies.","codex_root_id":42},
+  "alias": {"id":"renamed-problem","title":"  Preserve   the write ","file":"SRC/SAVE.TS","instructions":"In save(value: Value): void, validateValue(value) before write(value). Add test/save.test.ts test invalid value preserves storage asserting zero writes. Run npm run lint, npm run check, npm test, npm run build at repo root. Do not add guards or dependencies."},
+  "different": {"id":"auth-bypass","title":"Check authorization","file":"src/auth.ts","instructions":"In authorize(user: User): boolean, return user.roles.includes('writer'). Add test/auth.test.ts test reader cannot write asserting false for a reader. Run npm run lint, npm run check, npm test, npm run build at repo root. Do not add roles or dependencies."},
+  "valid": [
+    "PENDING: 0\nDECLINED: [{\"id\":\"codex-10\",\"reason\":\"Narrow edge case outside the outcome\"}]\nVERDICT: ACCEPT",
+    "VERDICT: FIX [{\"id\":\"lost-write\",\"title\":\"Preserve the write\",\"file\":\"src/save.ts\",\"instructions\":\"In save(value: Value): void, validateValue(value) before write(value). Add test/save.test.ts test invalid value preserves storage asserting zero writes. Run npm run lint, npm run check, npm test, npm run build at repo root. Do not add dependencies.\",\"codex_root_id\":42}]",
+    "VERDICT: REJECT Replace the broken invariant",
+    "VERDICT: SPLIT"
+  ],
+  "invalid": [
+    "VERDICT: ACCEPT\ntrailing prose", "VERDICT: FIX []", "VERDICT: FIX null", "VERDICT: ACCEPT extra", "VERDICT: REJECT",
+    "VERDICT: FIX [{\"id\":\"Round 1\",\"title\":\"x\",\"file\":\"a\",\"instructions\":\"Concrete fix\"}]",
+    "VERDICT: FIX [{\"id\":\"x\",\"title\":\"x\",\"file\":\"a\",\"instructions\":\"Concrete fix\",\"codex_root_id\":\"42\"}]",
+    "VERDICT: FIX [{\"id\":\"x\",\"title\":\"x\",\"file\":\"a\"}]",
+    "VERDICT: FIX [{\"id\":\"x\",\"title\":\"x\",\"file\":\"a\",\"instructions\":\"   \"}]"
+  ],
+  "caps": [
+    {"kind":"ACCEPT","reviews":3,"fixes":2,"repeated":true,"redesigned":true,"action":"finish"},
+    {"kind":"FIX","reviews":1,"fixes":0,"repeated":false,"redesigned":false,"action":"fix"},
+    {"kind":"FIX","reviews":2,"fixes":1,"repeated":true,"redesigned":false,"action":"redesign"},
+    {"kind":"FIX","reviews":2,"fixes":1,"repeated":true,"redesigned":true,"action":"escalate"},
+    {"kind":"FIX","reviews":3,"fixes":2,"repeated":false,"redesigned":false,"action":"escalate"},
+    {"kind":"FIX","reviews":3,"fixes":1,"repeated":true,"redesigned":false,"action":"escalate"},
+    {"kind":"FIX","reviews":2,"fixes":2,"repeated":false,"redesigned":false,"action":"escalate"},
+    {"kind":"REJECT","reviews":1,"fixes":0,"repeated":false,"redesigned":false,"action":"escalate"}
+  ]
+}
