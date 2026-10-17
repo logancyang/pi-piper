@@ -3,12 +3,16 @@ import { homedir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type Role = 'leader' | 'worker';
+export type Role = 'architect' | 'leader' | 'worker';
+// The architect is optional: its keys exist only when an architect model is configured, so a loop without
+// one has exactly the settings (and resume compatibility) it had before the role existed.
+type Roles<T> = Record<'leader' | 'worker', T> & { architect?: T };
+type PromptKey = 'leaderPlan' | 'leaderReview' | 'workerImplement' | 'workerFix' | 'triage' | 'reviewGuidance' | 'prDescription';
 export type LoopOptions = {
-  models: Record<Role, string>;
-  thinking: Record<Role, string>;
+  models: Roles<string>;
+  thinking: Roles<string>;
   promptDir: string;
-  promptFiles: Record<'leaderPlan' | 'leaderReview' | 'workerImplement' | 'workerFix' | 'triage' | 'reviewGuidance' | 'prDescription', string>;
+  promptFiles: Record<PromptKey, string> & { architectDesign?: string; architectIdentity?: string };
   caps: { maxFixRounds: number; maxFindings: number; sizeBudget: number };
 };
 const defaults: LoopOptions = {
@@ -26,26 +30,39 @@ function positive(value: unknown, name: string, max = 100_000, minimum = 1): num
   if (!Number.isSafeInteger(value) || (value as number) < minimum || (value as number) > max) throw new Error(`Invalid config cap: ${name}`);
   return value as number;
 }
-export function loadLoopOptions(cwd: string, overrides: Partial<{ models: Partial<Record<Role, string>>; thinking: Partial<Record<Role, string>>; promptDir: string }> = {}): LoopOptions {
+const levels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+export function loadLoopOptions(cwd: string, overrides: Partial<{ models: Partial<Record<Role, string>>; thinking: Partial<Record<Role, string>>; promptDir: string; architectIdentity: string }> = {}): LoopOptions {
   const file = resolve(cwd, 'piper.config.json');
   const raw = existsSync(file) ? object(JSON.parse(readFileSync(file, 'utf8'))) : {};
   const roles = raw.roles === undefined ? {} : object(raw.roles);
   const configuredModels = raw.models === undefined ? {} : object(raw.models);
   const configuredThinking = raw.thinking === undefined ? {} : object(raw.thinking);
   const roleValue = (role: Role, key: string) => roles[role] === undefined ? undefined : object(roles[role])[key];
-  const models = { ...defaults.models };
-  const thinking = { ...defaults.thinking };
-  for (const role of ['leader', 'worker'] as const) {
+  const models: Roles<string> = { ...defaults.models };
+  const thinking: Roles<string> = { ...defaults.thinking };
+  const architect = overrides.models?.architect ?? roleValue('architect', 'model') ?? configuredModels.architect;
+  if (architect !== undefined) { models.architect = architect; thinking.architect = 'high'; }
+  else if ((overrides.thinking?.architect ?? roleValue('architect', 'thinking') ?? configuredThinking.architect) !== undefined)
+    throw new Error('Architect thinking requires an architect model');
+  for (const role of ['architect', 'leader', 'worker'] as const) {
+    if (models[role] === undefined) continue;
     models[role] = overrides.models?.[role] ?? roleValue(role, 'model') ?? configuredModels[role] ?? models[role];
     thinking[role] = overrides.thinking?.[role] ?? roleValue(role, 'thinking') ?? configuredThinking[role] ?? thinking[role];
-    if (typeof models[role] !== 'string' || !models[role] || !['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking[role])) throw new Error(`Invalid ${role} role config`);
+    if (typeof models[role] !== 'string' || !models[role] || !levels.includes(thinking[role]!)) throw new Error(`Invalid ${role} role config`);
   }
   const configuredPrompts = raw.prompts === undefined ? {} : object(raw.prompts);
-  const promptFiles = { ...defaults.promptFiles };
+  const promptFiles: LoopOptions['promptFiles'] = { ...defaults.promptFiles,
+    ...(models.architect ? { architectDesign: 'architect-design.md', architectIdentity: '' } : {}) };
+  for (const key of ['architectDesign', 'architectIdentity'] as const)
+    if (!models.architect && configuredPrompts[key] !== undefined) throw new Error(`Prompt ${key} requires an architect model`);
   for (const key of Object.keys(promptFiles) as (keyof typeof promptFiles)[]) {
     const value = configuredPrompts[key];
     if (value !== undefined && typeof value !== 'string') throw new Error(`Invalid prompt config: ${key}`);
     if (value !== undefined) promptFiles[key] = value;
+  }
+  if (overrides.architectIdentity !== undefined) {
+    if (!models.architect) throw new Error('--architect-identity requires an architect model');
+    promptFiles.architectIdentity = overrides.architectIdentity;
   }
   const configuredCaps = raw.caps === undefined ? {} : object(raw.caps);
   const caps = {
@@ -60,7 +77,7 @@ export function loadLoopOptions(cwd: string, overrides: Partial<{ models: Partia
   return { models, thinking, promptDir, promptFiles, caps };
 }
 export function promptPath(options: LoopOptions, key: keyof LoopOptions['promptFiles']) {
-  const file = options.promptFiles[key];
+  const file = options.promptFiles[key] ?? '';
   if (!file) return '';
   const expanded = file.startsWith('~/') ? resolve(homedir(), file.slice(2)) : file;
   return isAbsolute(expanded) ? expanded : resolve(options.promptDir, expanded);

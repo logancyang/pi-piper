@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, chmodSync, rmSync, lstatSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, chmodSync, rmSync, lstatSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { issueKey, nextAction, parseVerdict, repeats } from '../src/loop-policy.js';
 import { runLoop } from '../src/loop.js';
-import { loadLoopOptions, promptPath } from '../src/loop-config.js';
+import { loadLoopOptions, promptPath, type LoopOptions } from '../src/loop-config.js';
 import { load, type LoopIO } from '../src/loop-io.js';
 const f = load(new URL('./fixtures/loop.json', import.meta.url).pathname);
 const url = 'https://github.com/owner/repo/issues/42', key = issueKey(url);
@@ -45,6 +45,27 @@ test('loop config resolves role/model aliases, prompt files, user guidance and c
     assert.throws(() => loadLoopOptions(cwd, { thinking: { leader: 'bogus' } }));
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 });
+test('architect role is optional: absent by default, configurable by config or CLI, identity file resolved', () => {
+  const cwd = temporary();
+  try {
+    const plain = loadLoopOptions(cwd);
+    assert.equal(plain.models.architect, undefined);
+    assert.ok(!('architectDesign' in plain.promptFiles) && !('architectIdentity' in plain.promptFiles), 'no-architect settings stay unchanged for resume');
+    assert.throws(() => loadLoopOptions(cwd, { thinking: { architect: 'high' } }), /requires an architect model/);
+    assert.throws(() => loadLoopOptions(cwd, { architectIdentity: '/tmp/identity.md' }), /requires an architect model/);
+    const cli = loadLoopOptions(cwd, { models: { architect: 'provider/architect' }, architectIdentity: join(cwd, 'me.md') });
+    assert.equal(cli.thinking.architect, 'high');
+    assert.ok(promptPath(cli, 'architectDesign').endsWith('/prompts/architect-design.md'));
+    assert.equal(promptPath(cli, 'architectIdentity'), join(cwd, 'me.md'));
+    writeFileSync(join(cwd, 'piper.config.json'), JSON.stringify({
+      roles: { architect: { model: 'provider/architect', thinking: 'xhigh' } }, prompts: { architectIdentity: '~/architect.md' } }));
+    const configured = loadLoopOptions(cwd, { thinking: { architect: 'max' } });
+    assert.equal(configured.models.architect, 'provider/architect'); assert.equal(configured.thinking.architect, 'max');
+    assert.ok(promptPath(configured, 'architectIdentity').endsWith('/architect.md'));
+    writeFileSync(join(cwd, 'piper.config.json'), JSON.stringify({ prompts: { architectDesign: 'design.md' } }));
+    assert.throws(() => loadLoopOptions(cwd), /requires an architect model/);
+  } finally { rmSync(cwd, { recursive: true, force: true }); }
+});
 test('caps and single-redesign policy fixtures', () => {
   for (const c of f.caps) assert.equal(nextAction({ ...parseVerdict(f.valid[0]), kind: c.kind },
     c.reviews, c.fixes, c.repeated, c.redesigned), c.action, JSON.stringify(c));
@@ -55,7 +76,7 @@ test('repeat detection uses stable id OR normalized file/title', () => {
   assert.ok(!repeats([f.different], [f.finding]));
   assert.ok(!repeats([f.finding], []));
 });
-async function scenario(outputs: string[], interrupt = false) {
+async function scenario(outputs: string[], interrupt = false, options?: (cwd: string) => LoopOptions) {
   const cwd = temporary(), dir = join(cwd, '.piper-loop', key), ids: string[] = [], prompts: string[] = [], roles: string[] = [];
   mkdirSync(dir, { recursive: true });
   const receipts = new Map<string, string>();
@@ -65,6 +86,7 @@ async function scenario(outputs: string[], interrupt = false) {
       ids.push(id); prompts.push(prompt); roles.push(role);
       if (!receipts.has(id)) receipts.set(id, outputs.shift()!);
       if (id.includes(':plan:')) writeFileSync(join(dir, 'plan.md'), 'Detailed fixture handoff spec');
+      if (id.includes(':design:') && receipts.get(id) === 'VERDICT: ACCEPT') writeFileSync(join(dir, 'design.md'), 'Fixture design');
       if (interrupt && !interrupted && id.includes(':implement:')) { interrupted = true; throw new Error('simulated disconnect after admission'); }
       assert.ok(receipts.get(id), `Unexpected turn ${id}`);
       return { text: receipts.get(id)!, turns: receipts.size };
@@ -73,10 +95,11 @@ async function scenario(outputs: string[], interrupt = false) {
     async pending() {},
   };
   try {
-    if (interrupt) await assert.rejects(runLoop(url, cwd, true, io), /simulated disconnect/);
-    const state = await runLoop(url, cwd, true, io);
+    const settings = options?.(cwd);
+    if (interrupt) await assert.rejects(runLoop(url, cwd, true, io, settings), /simulated disconnect/);
+    const state = await runLoop(url, cwd, true, io, settings);
     const before = ids.length;
-    await runLoop(url, cwd, true, io);
+    await runLoop(url, cwd, true, io, settings);
     assert.equal(ids.length, before, 'completed loop must not submit again');
     assert.equal(load(join(dir, 'state.json')).step, 'done');
     assert.equal(readFileSync(join(dir, 'events.jsonl'), 'utf8').trim().split('\n').length, 1);
@@ -143,6 +166,7 @@ test('review resume reuses Leader output and clears the PENDING barrier before W
 test('Leader hands Worker explicit code/test/command instructions without design judgment', async () => {
   const { state, prompts, roles, ids } = await scenario([plan, implemented, fix(), fixed1, 'VERDICT: ACCEPT']);
   assert.deepEqual(roles, ['leader', 'worker', 'leader', 'worker', 'leader']);
+  assert.ok(prompts.every(p => !/Design: |design\.md|[Aa]rchitect/.test(p)), 'no architect means no design phase or design references');
   assert.equal(state.implementer, 'worker');
   assert.ok(ids.every(id => id.startsWith(`${key}:worker:`)));
   assert.match(prompts[0], /files\/functions/);
@@ -154,6 +178,31 @@ test('Leader hands Worker explicit code/test/command instructions without design
   assert.match(prompts[2], /concrete instructions/);
   assert.match(prompts[3], /Execute each finding's instructions exactly/);
   assert.ok(prompts[3].includes(JSON.stringify(f.finding)));
+});
+test('architect designs first; the plan receives the design and review checks conformance', async () => {
+  let identityFile = '';
+  const withArchitect = (cwd: string) => {
+    identityFile = join(cwd, 'identity.md');
+    writeFileSync(identityFile, 'Fixture architect identity: favor deletion over addition.');
+    return loadLoopOptions(cwd, { models: { architect: 'provider/architect' }, architectIdentity: identityFile });
+  };
+  const { state, prompts, roles, ids } = await scenario(['VERDICT: ACCEPT', plan, implemented, fix(), fixed1, 'VERDICT: ACCEPT'], false, withArchitect);
+  assert.equal(state.verdict, 'ACCEPT');
+  assert.deepEqual(roles, ['architect', 'leader', 'worker', 'leader', 'worker', 'leader']);
+  assert.match(ids[0], /:design:/);
+  assert.ok(prompts[0].includes('Fixture architect identity'), 'identity file is included');
+  assert.ok(prompts[0].indexOf('Fixture architect identity') < prompts[0].indexOf('You are the architect'), 'identity is prepended');
+  assert.match(prompts[0], /Decision.*User flow.*Why.*Design.*Compatibility.*Plan/s);
+  assert.match(prompts[0], /do not write code/);
+  assert.match(prompts[1], /Design: .*design\.md/);
+  assert.match(prompts[1], /Follow its decision, user flow, compatibility line, and plan/);
+  assert.match(prompts[3], /deviation from its decision/);
+  const rejected = await scenario(['VERDICT: REJECT Choose between keeping or migrating the old format'], false, withArchitect);
+  assert.deepEqual(rejected.roles, ['architect']);
+  assert.match(rejected.state.verdict!, /^ESCALATED: architect needs a decision: Choose between/);
+  const blocked = await scenario(['VERDICT: ACCEPT', 'VERDICT: REJECT Design conflicts with the public API'], false, withArchitect);
+  assert.deepEqual(blocked.roles, ['architect', 'leader']);
+  assert.match(blocked.state.verdict!, /^ESCALATED: plan cannot follow design/);
 });
 test('pre-Worker persisted state is rejected before any model call', async () => {
   const cwd = temporary(), dir = join(cwd, '.piper-loop', key);
@@ -198,5 +247,17 @@ test('CLI --dry-run exercises plan/implement/review/fix/review with no network o
       encoding: 'utf8', env: { ...process.env, HOME: cwd },
     });
     assert.equal(JSON.parse(finished).type, 'loop_finished');
+    assert.ok(!existsSync(join(dir, 'design.md')), 'no architect, no design phase');
+    assert.equal(s.usage.architect, undefined);
+    const other = join(cwd, 'architect'); mkdirSync(other);
+    writeFileSync(join(cwd, 'identity.md'), 'Fixture identity');
+    const designed = execFileSync(process.execPath, [...args.slice(0, 5), '--cwd', other, ...args.slice(7),
+      '--architect', 'openai/test-architect', '--architect-identity', join(cwd, 'identity.md')], { cwd, encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    assert.match(designed, /Verdict: ACCEPT/);
+    const adir = join(other, '.piper-loop', key), a = load(join(adir, 'state.json'));
+    assert.match(readFileSync(join(adir, 'design.md'), 'utf8'), /Dry-run design/);
+    assert.equal(a.usage.architect.turns, 1); assert.equal(a.settings.models.architect, 'openai/test-architect');
+    assert.equal(a.settings.promptFiles.architectIdentity, join(cwd, 'identity.md'));
+    assert.equal(a.fixes, 1); assert.equal(a.reviews, 2);
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 });

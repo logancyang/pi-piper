@@ -1,6 +1,6 @@
 {
   "name": "@logancyang/pi-piper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A durable runner for always-on Pi agents and leader/worker coding loops",
   "type": "module",
   "license": "MIT",

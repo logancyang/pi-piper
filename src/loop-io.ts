@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { issueKey } from './loop-policy.js';
 import { cliArgs } from './self.js';
-import type { Role } from './loop-config.js';
+import type { LoopOptions, Role } from './loop-config.js';
 const exec = promisify(execFile);
 export const eventFile = join(process.env.PIPER_HOME || join(homedir(), '.pi-piper'), 'events.jsonl');
 export const load = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
@@ -24,11 +24,11 @@ export type Output = { text: string; turns: number; tokens?: number };
 export type Comment = { key: string; kind: string; root_id: number | null; [key: string]: unknown };
 export type Context = { base: string; comments: Comment[]; seen: string[] };
 export interface LoopIO {
-  turn(role: 'leader' | 'worker', id: string, prompt: string): Promise<Output>;
+  turn(role: Role, id: string, prompt: string): Promise<Output>;
   context(pr: string, head: string, last: string | undefined, seen: string[], deadline: number): Promise<Context>;
   pending(pr: string): Promise<void>;
 }
-export function liveIO(cwd: string, key: string, dir: string, models: Record<Role, string>, thinking: Record<Role, string>): LoopIO {
+export function liveIO(cwd: string, key: string, dir: string, models: LoopOptions['models'], thinking: LoopOptions['thinking']): LoopIO {
   const api = async (endpoint: string) => JSON.parse(await command('gh', ['api', endpoint], cwd));
   const pages = async (endpoint: string, timeout = 30_000): Promise<any[]> =>
     JSON.parse(await command('gh', ['api', '--paginate', '--slurp', endpoint + '?per_page=100'], cwd, timeout)).flat();
@@ -39,9 +39,10 @@ export function liveIO(cwd: string, key: string, dir: string, models: Record<Rol
   };
   return {
     async turn(role, id, prompt) {
-      const job = `${key}-${role}`;
-      await runCli(['start', job, '--cwd', cwd, '--model', models[role],
-        '--thinking', thinking[role], '--request-id', id, '--prompt', prompt], cwd);
+      const job = `${key}-${role}`, model = models[role], level = thinking[role];
+      if (!model || !level) throw new Error(`No ${role} model configured`);
+      await runCli(['start', job, '--cwd', cwd, '--model', model,
+        '--thinking', level, '--request-id', id, '--prompt', prompt], cwd);
       const event = await runCli(['wait', job, '--until', 'settled'], cwd, 0);
       if (event.type !== 'done' || event.requestId !== id) throw new Error(`Job ${job} did not complete for ${id}: ${event.question ?? event.reason ?? event.type}`);
       const output: Output = await runCli(['output', job], cwd);
@@ -85,12 +86,13 @@ export function liveIO(cwd: string, key: string, dir: string, models: Record<Rol
 }
 // A deterministic local rehearsal, never a network/model call. It deliberately takes one fix round.
 export function dryIO(dir: string): LoopIO {
-  const turns = { leader: 0, worker: 0 };
+  const turns = { architect: 0, leader: 0, worker: 0 };
   return {
     async turn(role, id) {
       turns[role]++;
+      if (id.includes(':design:')) writeFileSync(join(dir, 'design.md'), '# Dry-run design\nDecision: exercise the architect phase without external effects.\n');
       if (id.includes(':plan:')) writeFileSync(join(dir, 'plan.md'), '# Dry-run plan\nRequired outcome: exercise the loop without external effects.\n');
-      const text = id.includes(':plan:') ? 'VERDICT: ACCEPT' : id.includes(':implement:') ?
+      const text = id.includes(':design:') || id.includes(':plan:') ? 'VERDICT: ACCEPT' : id.includes(':implement:') ?
         `PR: https://github.com/piper-fixture/offline/pull/1\nHEAD: ${'a'.repeat(40)}` : role === 'worker' ?
         `HEAD: ${'b'.repeat(40)}` : id.includes(':review:0:') ?
         'DECLINED: [{"id":"narrow-case","reason":"Outside the required outcome"}]\nVERDICT: FIX [{"id":"missing-outcome","title":"Deliver the required outcome","file":"fixture.ts","instructions":"In fixture.ts, implement outcome(): boolean as return true. Add test/fixture.test.ts test outcome returns true asserting outcome() === true. Run npm run check, npm test and npm run build; lint is not configured in this fixture. Do not add options or dependencies."}]' : 'DECLINED: []\nVERDICT: ACCEPT';

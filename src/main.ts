@@ -25,7 +25,8 @@ pi-piper wait <job> --until settled|pr|any [--timeout S]
 pi-piper watch [--since EVENT_ID] [--timeout S]
 pi-piper ack <event-id>...
 pi-piper pending
-pi-piper loop <issue-url> --cwd DIR --leader MODEL --worker MODEL [--leader-thinking LEVEL] [--worker-thinking LEVEL] [--prompts DIR] [--dry-run]
+pi-piper loop <issue-url> --cwd DIR --leader MODEL --worker MODEL [--leader-thinking LEVEL] [--worker-thinking LEVEL]
+  [--architect MODEL] [--architect-thinking LEVEL] [--architect-identity FILE] [--prompts DIR] [--dry-run]
 pi-piper wait-loop <issue-key-or-url> [--timeout S]`;
 type Command = { op: string; job?: string; cwd?: string; model?: string; thinking?: string;
   prompt?: string; requestId?: string; n?: number; until?: string; timeout?: number; since?: string; ids?: string[] };
@@ -203,6 +204,7 @@ async function main() {
     until: { type: 'string' }, timeout: { type: 'string' }, n: { type: 'string', short: 'n' }, help: { type: 'boolean' },
     'dry-run': { type: 'boolean' }, since: { type: 'string' }, leader: { type: 'string' }, worker: { type: 'string' },
     'leader-thinking': { type: 'string' }, 'worker-thinking': { type: 'string' }, prompts: { type: 'string' },
+    architect: { type: 'string' }, 'architect-thinking': { type: 'string' }, 'architect-identity': { type: 'string' },
   } });
   const [op, job] = args;
   if (values.help || !op) { console.log(help); return; }
@@ -213,15 +215,20 @@ async function main() {
     const cwd = realpathSync(resolve(values.cwd));
     if (!statSync(cwd).isDirectory()) throw new Error('--cwd must be a directory');
     const options = loadLoopOptions(cwd, {
-      models: { ...(values.leader ? { leader: values.leader } : {}), ...(values.worker ? { worker: values.worker } : {}) },
-      thinking: { ...(values['leader-thinking'] ? { leader: values['leader-thinking'] } : {}), ...(values['worker-thinking'] ? { worker: values['worker-thinking'] } : {}) },
+      models: { ...(values.architect ? { architect: values.architect } : {}),
+        ...(values.leader ? { leader: values.leader } : {}), ...(values.worker ? { worker: values.worker } : {}) },
+      thinking: { ...(values['architect-thinking'] ? { architect: values['architect-thinking'] } : {}),
+        ...(values['leader-thinking'] ? { leader: values['leader-thinking'] } : {}), ...(values['worker-thinking'] ? { worker: values['worker-thinking'] } : {}) },
       ...(values.prompts ? { promptDir: resolve(cwd, values.prompts) } : {}),
+      ...(values['architect-identity'] ? { architectIdentity: resolve(cwd, values['architect-identity']) } : {}),
     });
     if (op === '_loop') await runLoop(job, cwd, values['dry-run'], undefined, options);
     else process.exitCode = await launchLoop(job, cwd, values['dry-run'] ?? false, [
       '--leader', options.models.leader, '--worker', options.models.worker,
       '--leader-thinking', options.thinking.leader, '--worker-thinking', options.thinking.worker,
       '--prompts', options.promptDir,
+      ...(options.models.architect ? ['--architect', options.models.architect, '--architect-thinking', options.thinking.architect!] : []),
+      ...(values['architect-identity'] ? ['--architect-identity', options.promptFiles.architectIdentity!] : []),
     ]);
     return;
   }

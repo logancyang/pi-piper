@@ -10,11 +10,12 @@ An always-on bot such as Grok Bot, Dots, Muse, or Hermes Agent can run on its ow
 
 ```text
 phone ↔ bot ↔ pi-piper
+                 ├─ architect job: design (optional)
                  ├─ leader job: plan / review
                  └─ worker job: implement / fix
 ```
 
-The leader designs, plans, and reviews; the faster worker implements. Astra/Luna, Opus/Sonnet, and Fable/Haiku are example pairings, not requirements. Choose models supported by your Pi login.
+The leader plans and reviews; the faster worker implements. An optional architect goes first: it reads the issue and code and writes a short design doc the leader must follow; it never writes code. Without an architect, the leader also designs. Astra/Luna, Opus/Sonnet, and Fable/Haiku are example pairings, not requirements; Opus can serve as both architect and leader with Sonnet as worker. Choose models supported by your Pi login.
 
 ## Install
 
@@ -59,7 +60,8 @@ Every job turn ends with exactly one final line: `STATUS: DONE`, `STATUS: NEEDS_
 
 ```sh
 pi-piper loop <issue-url> --cwd DIR --leader <model> --worker <model> \
-  [--leader-thinking LEVEL] [--worker-thinking LEVEL] [--prompts DIR] [--dry-run]
+  [--leader-thinking LEVEL] [--worker-thinking LEVEL] [--architect <model>] [--architect-thinking LEVEL] \
+  [--architect-identity FILE] [--prompts DIR] [--dry-run]
 ```
 
 An optional `piper.config.json` sets role models/thinking, prompt files, and caps. CLI flags override role settings; `--prompts DIR` selects the prompt directory. For example:
@@ -67,6 +69,7 @@ An optional `piper.config.json` sets role models/thinking, prompt files, and cap
 ```json
 {
   "roles": {
+    "architect": { "model": "provider/strong", "thinking": "high" },
     "leader": { "model": "provider/strong", "thinking": "high" },
     "worker": { "model": "provider/fast", "thinking": "medium" }
   },
@@ -77,15 +80,17 @@ An optional `piper.config.json` sets role models/thinking, prompt files, and cap
     "workerFix": "worker-fix.md",
     "triage": "triage.md",
     "reviewGuidance": "~/.config/pi-piper/review.md",
-    "prDescription": "~/.config/pi-piper/pr.md"
+    "prDescription": "~/.config/pi-piper/pr.md",
+    "architectDesign": "architect-design.md",
+    "architectIdentity": "~/.config/pi-piper/architect.md"
   },
   "caps": { "maxFixRounds": 2, "maxFindings": 5, "sizeBudget": 400 }
 }
 ```
 
-Prompt names resolve relative to the prompt directory; absolute paths are accepted. Optional review and PR-description files plug in user-specific practice. The built-in triage fallback is short and generic.
+Prompt names resolve relative to the prompt directory; absolute paths are accepted. Optional review, PR-description, and architect identity files plug in user-specific practice; the identity file is prepended to the architect prompt. Architect thinking and prompts require an architect model. The built-in triage fallback is short and generic.
 
-The loop plans, implements, opens a ready PR, triages each new review comment with a leader reply, and lets the worker reply `Fixed in <sha>` after fixes. Automatic review bots can run on open and push. It never merges. `--dry-run` exercises the loop without models or GitHub.
+The loop designs (when an architect is set) into `.piper-loop/<issue>/design.md`, plans, implements, opens a ready PR, triages each new review comment with a leader reply, and lets the worker reply `Fixed in <sha>` after fixes. Automatic review bots can run on open and push. It never merges. `--dry-run` exercises the loop without models or GitHub.
 
 ## Guarantees and limits
 
