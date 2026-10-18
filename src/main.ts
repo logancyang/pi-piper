@@ -106,7 +106,6 @@ async function serve() {
       if (command.op === 'wait') {
         const until = command.until ?? 'any';
         if (!['settled', 'pr', 'any'].includes(until)) throw new Error('Invalid --until');
-        const target = await runner.latestSubmission(job);
         let finished = false;
         let timer: NodeJS.Timeout | undefined;
         const finish = (value: unknown) => {
@@ -116,13 +115,14 @@ async function serve() {
           runner.notifications.off('event', listener);
           if (!res.destroyed) json(res, value);
         };
-        const listener = (event: JobEvent) => {
-          if (event.job === job.key && (event.type === 'pr_opened' ? until !== 'settled' : until !== 'pr' && event.submissionId === target)) finish(event);
+        const listener = async (event: JobEvent) => {
+          if (event.job !== job.key || (event.type === 'pr_opened' ? until === 'settled' : until === 'pr')) return;
+          if (event.type === 'pr_opened' || await runner.isCurrentSettled(job, event)) finish(event);
         };
         runner.notifications.on('event', listener);
         res.on('close', () => { finished = true; clearTimeout(timer); runner.notifications.off('event', listener); });
         if (command.timeout !== undefined) timer = setTimeout(() => finish({ type: 'timeout', job: job.key }), command.timeout * 1000);
-        const existing = await runner.matchingEvent(job, until, target);
+        const existing = await runner.matchingEvent(job, until);
         if (existing) finish(existing);
         return;
       }

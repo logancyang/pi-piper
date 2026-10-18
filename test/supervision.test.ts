@@ -94,6 +94,50 @@ test('watch covers all non-test jobs, repeats unacked events, and blocks again a
   } finally { await f.close(); }
 });
 
+test('settled wait ignores an earlier submission while a follow-up is queued', { timeout: 30_000 }, async () => {
+  const f = await fixture();
+  try {
+    const job = await f.runner.start('wait-follow-up', process.cwd(), 'faux/faux-1', 'high');
+    let releaseFollowUp!: (message: ReturnType<typeof fauxAssistantMessage>) => void;
+    let followUpStarted!: () => void;
+    const runningFollowUp = new Promise<void>(resolve => { followUpStarted = resolve; });
+    f.faux.setResponses([fauxAssistantMessage('STATUS: DONE'), (_context, options) => new Promise(resolve => {
+      releaseFollowUp = resolve;
+      followUpStarted();
+      options!.signal!.addEventListener('abort', () => resolve(fauxAssistantMessage('', { stopReason: 'aborted' })), { once: true });
+    })]);
+    const firstEvent = new Promise<JobEvent>(resolve => {
+      const observe = (event: JobEvent) => {
+        if (event.job === job.key && event.type !== 'pr_opened') { f.runner.notifications.off('event', observe); resolve(event); }
+      };
+      f.runner.notifications.on('event', observe);
+    });
+    const first = await f.runner.submit(job, 'First', 'first');
+    let resolveWait!: (event: JobEvent) => void;
+    const waited = new Promise<JobEvent>(resolve => { resolveWait = resolve; });
+    const listener = async (event: JobEvent) => {
+      if (event.job === job.key && await f.runner.isCurrentSettled(job, event)) {
+        f.runner.notifications.off('event', listener);
+        resolveWait(event);
+      }
+    };
+    f.runner.notifications.on('event', listener);
+    const second = await f.runner.submit(job, 'Follow-up', 'second');
+    await runningFollowUp;
+    await (await f.runner.harness.submission(first.submissionId, ctx))!.wait(ctx);
+    assert.equal((await firstEvent).submissionId, first.submissionId);
+    let resolved = false;
+    void waited.then(() => { resolved = true; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(resolved, false, 'first submission cannot settle the job while its follow-up is running');
+    releaseFollowUp(fauxAssistantMessage('STATUS: BLOCKED: Follow-up'));
+    await (await f.runner.harness.submission(second.submissionId, ctx))!.wait(ctx);
+    const event = await waited;
+    assert.equal(event.submissionId, second.submissionId);
+    assert.equal(event.type, 'blocked');
+  } finally { await f.close(); }
+});
+
 test('settlement uses each submission answer, not the latest message in a busy conversation', { timeout: 30_000 }, async () => {
   const f = await fixture();
   try {

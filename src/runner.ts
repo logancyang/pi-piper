@@ -297,12 +297,16 @@ export class Runner {
   async latestSubmission(job: Job) {
     return (await this.storage.scanSubmissions({ conversationId: job.conversationId, order: 'descending' }, 1, undefined, ctx)).items[0]?.id;
   }
+  async isCurrentSettled(job: Job, event: JobEvent) {
+    return !!event.submissionId && event.submissionId === await this.latestSubmission(job) && (await this.status(job)).status === 'idle';
+  }
   // Register the caller's listener BEFORE this read. No DB polling or read/subscribe gap.
-  async matchingEvent(job: Job, until: string, target: SubmissionId | undefined): Promise<JobEvent | undefined> {
+  async matchingEvent(job: Job, until: string): Promise<JobEvent | undefined> {
     const events = Object.values((await this.harness.snapshot(Outbox, ctx))!.events).filter(e => e.job === job.key);
     const pr = events.find(e => e.type === 'pr_opened');
     if (until === 'pr' || (until === 'any' && pr)) return pr;
-    return events.find(e => e.submissionId === target);
+    for (const event of events) if (await this.isCurrentSettled(job, event)) return event;
+    return undefined;
   }
   async pending(since?: string): Promise<JobEvent[]> {
     const doc = (await this.harness.snapshot(Outbox, ctx))!;
